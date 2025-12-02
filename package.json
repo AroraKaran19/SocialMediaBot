@@ -12,11 +12,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@toon-format/toon": "^1.0.0",
+    "axios": "^1.13.2",
     "cheerio": "^1.1.2",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "fast-xml-parser": "^5.3.1",
     "mongoose": "^8.19.3",
+    "multer": "^2.0.2",
     "puppeteer": "^24.29.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-adblocker": "^2.13.6",
@@ -26,6 +29,7 @@
     "tsx": "^4.20.6"
   },
   "devDependencies": {
-    "@types/express": "^5.0.5"
+    "@types/express": "^5.0.5",
+    "@types/multer": "^2.0.0"
   }
 }

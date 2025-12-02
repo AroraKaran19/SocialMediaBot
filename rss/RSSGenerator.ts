@@ -1,12 +1,16 @@
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import AdblockerPlugin from "puppeteer-extra-plugin-adblocker";
-import { Browser, BrowserContext, Page } from "puppeteer";
+import { Browser, Page } from "puppeteer";
 import dotenv from "dotenv";
 import mongoose, { Collection } from "mongoose";
 import fs from "fs";
 import path from "path";
+import axios from "axios";
+
 dotenv.config();
+puppeteer.use(StealthPlugin());
+puppeteer.use(AdblockerPlugin());
 
 const mongoUri = process.env.MONGODB_URI!;
 let collection: Collection | null = null;
@@ -35,32 +39,62 @@ interface Tweet {
   views: string;
 }
 
-class RSSGenerator {
+export default class RSSGenerator {
   private browser: Browser | null = null;
   private page: Page | null = null;
   private type: "reddit" | "x" | "google" | null = null;
   private keyword: string;
-  private xmlFilePath: string;
+  private xmlFilePath!: string;
   private processedTweetIds: Set<string> = new Set();
 
   constructor(type: "reddit" | "x" | "google", keyword: string) {
     this.type = type;
     this.keyword = keyword;
-    this.xmlFilePath = path.join(
-      process.cwd(),
-      `rss_${keyword}_${Date.now()}.xml`
-    );
+    this.setXMLFilePath();
+  }
+
+  private setXMLFilePath() {
+    let resultDir: string;
+    switch (this.type) {
+      case "x":
+        resultDir = path.join(process.cwd(), "result", "X");
+        break;
+      case "reddit":
+        resultDir = path.join(process.cwd(), "result", "reddit");
+        break;
+      case "google":
+        resultDir = path.join(process.cwd(), "result", "google");
+        break;
+      default:
+        resultDir = process.cwd();
+    }
+
+    // Ensure directory exists
+    if (!fs.existsSync(resultDir)) {
+      fs.mkdirSync(resultDir, { recursive: true });
+    }
+
+    const fileName = `rss_${this.keyword}_${Date.now()}.xml`;
+    this.xmlFilePath = path.join(resultDir, fileName);
   }
 
   async init() {
-    if (this.type !== "x")
-      throw new Error("Only in case of x scrapping is used!");
+    if (this.type !== "x"){ 
+      if (this.type === "google") {
+        await this.googleRSS();
+      } else if (this.type === "reddit") {
+        await this.redditRSS();
+      } else {
+        throw new Error("Invalid type");
+      }
+      return;
+    }
     const proxyUrl = await this.getProxy();
     if (!proxyUrl) {
       throw new Error("No proxy found");
     }
     this.browser = await puppeteer.launch({
-      headless: false,
+      headless: true,
       userDataDir: "./userDataX",
       // args: [`--proxy-server=${proxyUrl.proxyUrl}`],
     });
@@ -308,7 +342,7 @@ class RSSGenerator {
     );
 
     let consecutiveNoNewTweets = 0;
-    const maxConsecutiveNoNewTweets = 5;
+    const maxConsecutiveNoNewTweets = 3;
 
     try {
       await this.page.waitForSelector('article[data-testid="tweet"]', {
@@ -392,6 +426,7 @@ class RSSGenerator {
 
   async getProxy() {
     const minUsageProxy = await collection?.findOne({}, { sort: { usage: 1 } });
+    console.log(minUsageProxy);
     if (!minUsageProxy) {
       return null;
     }
@@ -426,6 +461,30 @@ class RSSGenerator {
     return selectedProxy;
   }
 
+  async googleRSS() {
+    this.setXMLFilePath();
+    const result = await axios.get(
+      `https://news.google.com/rss/search?q=${encodeURIComponent(
+        this.keyword
+      )}&scoring=n`
+    );
+    const xml = result.data;
+    fs.writeFileSync(this.xmlFilePath, xml, "utf-8");
+    console.log(`📄 Created Google XML file: ${this.xmlFilePath}`);
+  }
+
+  async redditRSS() {
+    this.setXMLFilePath();
+    const result = await axios.get(
+      `https://www.reddit.com/search.rss?q=${encodeURIComponent(
+        this.keyword
+      )}&sort=top&t=week`
+    );
+    const xml = result.data;
+    fs.writeFileSync(this.xmlFilePath, xml, "utf-8");
+    console.log(`📄 Created Reddit XML file: ${this.xmlFilePath}`);
+  }
+
   async close() {
     if (this.browser) {
       await this.browser.close();
@@ -437,7 +496,7 @@ class RSSGenerator {
 (async () => {
   await connect();
 
-  const rssGenerator = new RSSGenerator("x", "trending ai platform");
+  const rssGenerator = new RSSGenerator("x", "delhi bomb blast");
   try {
     await rssGenerator.init();
   } catch (error) {

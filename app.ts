@@ -1,4 +1,5 @@
 import express from "express";
+import contentRoutes from "./src/routes/content.routes";
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.get("/health", (req, res) => {
 });
 
 // API Routes
+app.use("/content", contentRoutes);
 
 // Root route
 app.get("/", (req, res) => {
